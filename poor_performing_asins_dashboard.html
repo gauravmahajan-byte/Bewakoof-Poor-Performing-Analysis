@@ -569,6 +569,18 @@
       </div>
     </div>
 
+    <!-- Combined export bar -->
+    <div style="background:#fff;border-radius:12px;padding:14px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.07);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#1a1a2e;">Download Combined PID Report</div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:2px;">One file · 🔴 Red rows = Underperforming · 🟢 Green rows = Overperforming · Status column included</div>
+      </div>
+      <div class="export-btns">
+        <button class="export-btn btn-csv"  onclick="exportCombinedPIDCSV()"  style="padding:9px 20px;font-size:13px;">⬇ Download CSV</button>
+        <button class="export-btn btn-xlsx" onclick="exportCombinedPIDXLSX()" style="padding:9px 20px;font-size:13px;">⬇ Download Excel (Color Coded)</button>
+      </div>
+    </div>
+
     <!-- Two tables -->
     <div class="pid-tables">
 
@@ -578,10 +590,6 @@
           <div>
             <div class="ptb-title">🔴 Consistently Underperforming PIDs</div>
             <div class="ptb-count" id="under-count"></div>
-          </div>
-          <div class="export-btns">
-            <button class="export-btn btn-csv"  onclick="exportPIDCSV('under')">⬇ CSV</button>
-            <button class="export-btn btn-xlsx" onclick="exportPIDXLSX('under')">⬇ Excel</button>
           </div>
         </div>
         <div class="table-scroll">
@@ -596,10 +604,6 @@
             <div class="ptb-title">🟢 Consistently Overperforming PIDs</div>
             <div class="ptb-count" id="over-count"></div>
           </div>
-          <div class="export-btns">
-            <button class="export-btn btn-csv"  onclick="exportPIDCSV('over')">⬇ CSV</button>
-            <button class="export-btn btn-xlsx" onclick="exportPIDXLSX('over')">⬇ Excel</button>
-          </div>
         </div>
         <div class="table-scroll">
           <table><thead id="over-head"></thead><tbody id="over-body"></tbody></table>
@@ -611,27 +615,41 @@
     <!-- PID Stats -->
     <div class="stats-section" style="margin-top:24px;">
       <div class="section-title">PID Statistical Breakdown</div>
-      <div class="pid-stats-grid">
+
+      <!-- Underperforming stats row -->
+      <div style="font-size:12px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;">🔴 Underperforming</div>
+      <div class="stats-grid" style="margin-bottom:24px;">
         <div class="stat-card">
-          <h3>Underperforming — By Category</h3>
+          <h3>By Category</h3>
           <div id="pid-stat-under-cat"></div>
         </div>
         <div class="stat-card">
-          <h3>Overperforming — By Category</h3>
-          <div id="pid-stat-over-cat"></div>
+          <h3>By Gender</h3>
+          <div id="pid-stat-under-gender"></div>
         </div>
         <div class="stat-card">
           <h3>Metric Averages</h3>
-          <div style="margin-bottom:12px;">
-            <div style="font-size:11px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Underperforming</div>
-            <div class="metrics-grid" id="pid-stat-under-metrics"></div>
-          </div>
-          <div>
-            <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Overperforming</div>
-            <div class="metrics-grid" id="pid-stat-over-metrics"></div>
-          </div>
+          <div class="metrics-grid" id="pid-stat-under-metrics"></div>
         </div>
       </div>
+
+      <!-- Overperforming stats row -->
+      <div style="font-size:12px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;">🟢 Overperforming</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3>By Category</h3>
+          <div id="pid-stat-over-cat"></div>
+        </div>
+        <div class="stat-card">
+          <h3>By Gender</h3>
+          <div id="pid-stat-over-gender"></div>
+        </div>
+        <div class="stat-card">
+          <h3>Metric Averages</h3>
+          <div class="metrics-grid" id="pid-stat-over-metrics"></div>
+        </div>
+      </div>
+
     </div>
 
   </div><!-- /pid-results -->
@@ -1142,10 +1160,12 @@ async function runPIDAnalysis() {
     const amzTagIdx = hdrs.findIndex(h => h.toLowerCase().includes('amz tag') || h.toLowerCase() === 'amz tag');
 
     hdrs.forEach((h, i) => {
-      if (h === 'Spend')  spendIdxs.push(i);
-      if (h === 'ROI')    roiIdxs.push(i);
-      if (h === 'ROAS')   raosIdxs.push(i);
-      if (h === 'CVR')    cvrIdxs.push(i);
+      // Trim + case-insensitive matching to handle leading spaces and week suffixes like ' Spend(W1)'
+      const ht = h.trim().toLowerCase();
+      if (ht.startsWith('spend') && !ht.includes('total') && !ht.includes('ad')) spendIdxs.push(i);
+      if (ht === 'roi')  roiIdxs.push(i);
+      if (ht === 'roas') raosIdxs.push(i);
+      if (ht === 'cvr')  cvrIdxs.push(i);
     });
 
     if (spendIdxs.length < 3 || roiIdxs.length < 3) {
@@ -1294,6 +1314,7 @@ function renderPIDStats() {
     data.forEach(r => { const v = r[key] || 'Unknown'; if (!map[v]) map[v] = 0; map[v]++; });
     const entries = Object.entries(map).sort((a,b) => b[1]-a[1]);
     const max = data.length || 1;
+    if (!entries.length) return '<div style="color:#9ca3af;font-size:12px;padding:6px;">No data</div>';
     return entries.slice(0,8).map(([label, count]) => {
       const pct = Math.round(count/max*100);
       return `<div class="stat-row"><span class="sr-label" title="${esc(label)}">${esc(label)}</span><div class="sr-bar-wrap"><div class="sr-bar" style="width:${pct}%"></div></div><span class="sr-val">${count} <span style="color:#9ca3af;font-size:10px;">(${pct}%)</span></span></div>`;
@@ -1305,29 +1326,98 @@ function renderPIDStats() {
     const avg = key => data.length ? r2(data.reduce((s,r) => s+r[key],0)/data.length) : 0;
     const sum = key => r2(data.reduce((s,r) => s+r[key],0));
     const items = [
-      { label:'Avg W1 ROI', val: avg('w1ROI').toFixed(2) },
-      { label:'Avg W2 ROI', val: avg('w2ROI').toFixed(2) },
-      { label:'Avg W3 ROI', val: avg('w3ROI').toFixed(2) },
-      { label:'Avg ROI',    val: avg('avgROI').toFixed(2) },
-      { label:'Total Spend',val: '₹'+Math.round(sum('totalSpend')).toLocaleString('en-IN') },
-      { label:'PID Count',  val: data.length },
+      { label:'Avg W1 ROI',  val: avg('w1ROI').toFixed(2) },
+      { label:'Avg W2 ROI',  val: avg('w2ROI').toFixed(2) },
+      { label:'Avg W3 ROI',  val: avg('w3ROI').toFixed(2) },
+      { label:'Avg ROI',     val: avg('avgROI').toFixed(2) },
+      { label:'Total Spend', val: '₹'+Math.round(sum('totalSpend')).toLocaleString('en-IN') },
+      { label:'PID Count',   val: data.length },
     ];
     return items.map(m => `<div class="metric-pill"><div class="mp-label">${esc(m.label)}</div><div class="mp-val" style="font-size:16px;color:${color};">${esc(String(m.val))}</div></div>`).join('');
   }
 
   document.getElementById('pid-stat-under-cat').innerHTML     = groupBar(underResults, 'category');
-  document.getElementById('pid-stat-over-cat').innerHTML      = groupBar(overResults,  'category');
+  document.getElementById('pid-stat-under-gender').innerHTML  = groupBar(underResults, 'gender');
   document.getElementById('pid-stat-under-metrics').innerHTML = metricPills(underResults, '#dc2626');
+  document.getElementById('pid-stat-over-cat').innerHTML      = groupBar(overResults,  'category');
+  document.getElementById('pid-stat-over-gender').innerHTML   = groupBar(overResults,  'gender');
   document.getElementById('pid-stat-over-metrics').innerHTML  = metricPills(overResults,  '#16a34a');
 }
 
+// Combined export — one file, Status column, color-coded rows
+const PID_COLS_EXPORT = [{ key:'status', label:'Status' }, ...PID_COLS];
+
+function exportCombinedPIDCSV() {
+  if (!underResults.length && !overResults.length) return;
+  const hdr  = PID_COLS_EXPORT.map(c => c.label).join(',');
+  const makeRows = (data, label) => data.map(r =>
+    PID_COLS_EXPORT.map(c => {
+      const v = c.key === 'status' ? label : (r[c.key]??'');
+      return String(v).includes(',') ? `"${v}"` : v;
+    }).join(',')
+  );
+  const body = [...makeRows(underResults, 'Underperforming'), ...makeRows(overResults, 'Overperforming')].join('\n');
+  download('PID_Performance_Analysis.csv', 'text/csv', '﻿' + hdr + '\n' + body);
+}
+
+function exportCombinedPIDXLSX() {
+  if (!underResults.length && !overResults.length) return;
+
+  const headers = PID_COLS_EXPORT.map(c => c.label);
+  const makeRows = (data, label) => data.map(r =>
+    PID_COLS_EXPORT.map(c => c.key === 'status' ? label : (r[c.key]??''))
+  );
+
+  const wsData = [
+    headers,
+    ...makeRows(underResults, 'Underperforming'),
+    ...makeRows(overResults,  'Overperforming'),
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = PID_COLS_EXPORT.map(c => ({ wch: Math.max(c.label.length+2, 14) }));
+
+  // Header row style
+  headers.forEach((_, ci) => {
+    const cell = XLSX.utils.encode_cell({ r: 0, c: ci });
+    if (ws[cell]) ws[cell].s = { fill: { patternType:'solid', fgColor:{ rgb:'1a1a2e' } }, font: { bold:true, color:{ rgb:'FFFFFF' } } };
+  });
+
+  // Red rows for underperforming (rows 1 … underResults.length)
+  underResults.forEach((_, ri) => {
+    headers.forEach((_, ci) => {
+      const cell = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
+      if (ws[cell]) ws[cell].s = { fill: { patternType:'solid', fgColor:{ rgb:'FEE2E2' } }, font: { color:{ rgb:'991B1B' } } };
+    });
+    // Bold the status cell
+    const sc = XLSX.utils.encode_cell({ r: ri + 1, c: 0 });
+    if (ws[sc]) ws[sc].s = { fill: { patternType:'solid', fgColor:{ rgb:'EF4444' } }, font: { bold:true, color:{ rgb:'FFFFFF' } } };
+  });
+
+  // Green rows for overperforming
+  overResults.forEach((_, ri) => {
+    const rowIdx = ri + underResults.length + 1;
+    headers.forEach((_, ci) => {
+      const cell = XLSX.utils.encode_cell({ r: rowIdx, c: ci });
+      if (ws[cell]) ws[cell].s = { fill: { patternType:'solid', fgColor:{ rgb:'DCFCE7' } }, font: { color:{ rgb:'14532D' } } };
+    });
+    // Bold the status cell
+    const sc = XLSX.utils.encode_cell({ r: rowIdx, c: 0 });
+    if (ws[sc]) ws[sc].s = { fill: { patternType:'solid', fgColor:{ rgb:'22C55E' } }, font: { bold:true, color:{ rgb:'FFFFFF' } } };
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PID Performance Analysis');
+  XLSX.writeFile(wb, 'PID_Performance_Analysis.xlsx');
+}
+
+// Keep individual exports for backwards compatibility
 function exportPIDCSV(type) {
   const data = type === 'under' ? underResults : overResults;
   if (!data.length) return;
   const hdr  = PID_COLS.map(c => c.label).join(',');
   const body = data.map(r => PID_COLS.map(c => { const v = r[c.key]??''; return String(v).includes(',') ? `"${v}"` : v; }).join(',')).join('\n');
-  const name = type === 'under' ? 'Underperforming_PIDs.csv' : 'Overperforming_PIDs.csv';
-  download(name, 'text/csv', '﻿' + hdr + '\n' + body);
+  download(type === 'under' ? 'Underperforming_PIDs.csv' : 'Overperforming_PIDs.csv', 'text/csv', '﻿' + hdr + '\n' + body);
 }
 
 function exportPIDXLSX(type) {
@@ -1337,10 +1427,8 @@ function exportPIDXLSX(type) {
   const ws = XLSX.utils.aoa_to_sheet(wsData);
   ws['!cols'] = PID_COLS.map(c => ({ wch: Math.max(c.label.length+2, 12) }));
   const wb = XLSX.utils.book_new();
-  const sheetLabel = type === 'under' ? 'Underperforming PIDs' : 'Overperforming PIDs';
-  XLSX.utils.book_append_sheet(wb, ws, sheetLabel);
-  const fname = type === 'under' ? 'Underperforming_PIDs.xlsx' : 'Overperforming_PIDs.xlsx';
-  XLSX.writeFile(wb, fname);
+  XLSX.utils.book_append_sheet(wb, ws, type === 'under' ? 'Underperforming PIDs' : 'Overperforming PIDs');
+  XLSX.writeFile(wb, type === 'under' ? 'Underperforming_PIDs.xlsx' : 'Overperforming_PIDs.xlsx');
 }
 </script>
 </body>
