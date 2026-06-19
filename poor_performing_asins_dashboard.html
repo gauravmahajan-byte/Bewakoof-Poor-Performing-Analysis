@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poor Performing ASINs · Bewakoof</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+    /* ── HEADER ── */
+    .header {
+      background: #1a1a2e; color: #fff;
+      padding: 18px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .header-left h1 { font-size: 18px; font-weight: 700; }
+    .header-left p  { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+
+    /* ── LAYOUT ── */
+    .main { padding: 24px 32px; max-width: 1800px; margin: 0 auto; }
+    .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #6b7280; margin-bottom: 14px; }
+
+    /* ── UPLOAD CARDS ── */
+    .upload-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+    .upload-card {
+      background: #fff; border: 2px dashed #d1d5db; border-radius: 12px;
+      padding: 24px 20px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s; position: relative;
+    }
+    .upload-card:hover { border-color: #f97316; background: #fff7ed; }
+    .upload-card.uploaded { border-color: #22c55e; border-style: solid; background: #f0fdf4; }
+    .upload-card .uc-icon  { font-size: 30px; margin-bottom: 10px; }
+    .upload-card .uc-label { font-size: 14px; font-weight: 600; color: #1a1a2e; margin-bottom: 4px; }
+    .upload-card .uc-freq  { font-size: 11px; color: #9ca3af; }
+    .upload-card .uc-type  { font-size: 11px; color: #9ca3af; }
+    .upload-card .uc-file  { font-size: 11px; color: #16a34a; margin-top: 8px; font-weight: 600; word-break: break-all; }
+    .upload-card input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+    /* ── FILTER THRESHOLDS ── */
+    .threshold-card {
+      background: #fff; border-radius: 12px; padding: 20px 24px;
+      margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .threshold-card .tc-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+    }
+    .threshold-card .tc-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #6b7280; }
+    .threshold-card .tc-note  { font-size: 11px; color: #9ca3af; }
+    .threshold-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .threshold-item label { display: block; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .threshold-item .th-wrap { display: flex; align-items: center; gap: 0; }
+    .threshold-item .th-prefix {
+      background: #f3f4f6; border: 1px solid #e5e7eb; border-right: none;
+      border-radius: 7px 0 0 7px; padding: 8px 10px; font-size: 12px; font-weight: 700; color: #6b7280;
+    }
+    .threshold-item input[type="number"] {
+      border: 1px solid #e5e7eb; border-radius: 0 7px 7px 0;
+      padding: 8px 10px; font-size: 14px; font-weight: 700; color: #1a1a2e;
+      width: 100%; outline: none; transition: border-color 0.2s;
+    }
+    .threshold-item input:focus { border-color: #f97316; }
+    .reset-thresholds {
+      background: none; border: 1px solid #f97316; color: #f97316;
+      border-radius: 7px; padding: 8px 14px; font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .reset-thresholds:hover { background: #fff7ed; }
+
+    /* ── RUN BUTTON ── */
+    .run-row { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+    .run-btn {
+      background: #f97316; color: #fff; border: none;
+      padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 700;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .run-btn:hover:not(:disabled) { background: #ea6c05; }
+    .run-btn:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+    .run-hint { font-size: 12px; color: #9ca3af; }
+
+    /* ── LOADING ── */
+    .loading-overlay {
+      display: none; background: #fff; border-radius: 12px;
+      padding: 48px; text-align: center; margin-bottom: 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .spinner {
+      width: 44px; height: 44px; border: 4px solid #f3f4f6;
+      border-top-color: #f97316; border-radius: 50%;
+      animation: spin 0.75s linear infinite; margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-overlay p     { color: #6b7280; font-size: 14px; }
+    .loading-overlay small { color: #9ca3af; font-size: 12px; }
+
+    /* ── RESULTS ── */
+    .results { display: none; }
+
+    /* KPI Cards */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .kpi-card {
+      background: #fff; border-radius: 12px; padding: 20px 22px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-left: 4px solid #f97316;
+    }
+    .kpi-card.green  { border-left-color: #22c55e; }
+    .kpi-card.blue   { border-left-color: #3b82f6; }
+    .kpi-card.purple { border-left-color: #a855f7; }
+    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #9ca3af; font-weight: 600; margin-bottom: 6px; }
+    .kpi-value { font-size: 26px; font-weight: 800; color: #1a1a2e; line-height: 1; }
+    .kpi-sub   { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
+    /* Dimension filter bar */
+    .filter-bar {
+      background: #fff; border-radius: 12px; padding: 14px 20px;
+      margin-bottom: 16px; display: flex; gap: 20px; align-items: flex-end;
+      flex-wrap: wrap; box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .filter-group label { display: block; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+    .filter-group select {
+      border: 1px solid #e5e7eb; border-radius: 7px; padding: 7px 10px;
+      font-size: 13px; color: #1a1a2e; outline: none; min-width: 130px;
+      background: #f9fafb; cursor: pointer; transition: border-color 0.2s;
+    }
+    .filter-group select:focus { border-color: #f97316; }
+    .dim-reset { background: none; border: none; font-size: 12px; color: #f97316; cursor: pointer; text-decoration: underline; margin-left: auto; align-self: center; font-weight: 600; }
+
+    /* ── TABLE ── */
+    .table-container { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); overflow: hidden; margin-bottom: 24px; }
+    .table-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; border-bottom: 1px solid #f3f4f6;
+    }
+    .table-count { font-size: 13px; color: #6b7280; }
+    .table-count strong { color: #1a1a2e; }
+    .export-btns { display: flex; gap: 8px; }
+    .export-btn {
+      padding: 8px 18px; border-radius: 7px; font-size: 13px; font-weight: 700;
+      cursor: pointer; border: none; transition: opacity 0.2s; display: flex; align-items: center; gap: 5px;
+    }
+    .export-btn:hover { opacity: 0.82; }
+    .btn-csv  { background: #dcfce7; color: #15803d; }
+    .btn-xlsx { background: #dbeafe; color: #1d4ed8; }
+
+    .table-scroll { overflow-x: auto; max-height: 550px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    thead th {
+      background: #1a1a2e; color: #fff; padding: 10px 13px;
+      text-align: left; white-space: nowrap; cursor: pointer; user-select: none;
+      position: sticky; top: 0; z-index: 2; font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
+    }
+    thead th:hover { background: #2d2d50; }
+    .sort-icon { opacity: 0.4; margin-left: 4px; font-size: 9px; }
+    .sort-active .sort-icon { opacity: 1; }
+    thead th.th-roi    { background: #ca8a04 !important; }
+    thead th.th-pidroi { background: #15803d !important; }
+    tbody tr:nth-child(even) { background: #fafafa; }
+    tbody tr:hover { background: #fff7ed !important; }
+    tbody td { padding: 9px 13px; border-bottom: 1px solid #f3f4f6; white-space: nowrap; color: #374151; }
+    td.td-roi    { background: #fefce8 !important; color: #713f12; font-weight: 600; }
+    td.td-pidroi { background: #f0fdf4 !important; color: #14532d; font-weight: 600; }
+    .no-data { padding: 48px; text-align: center; color: #9ca3af; font-size: 14px; }
+
+    /* ── STATS SECTION ── */
+    .stats-section { margin-bottom: 24px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .stat-card {
+      background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .stat-card h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; margin-bottom: 14px; }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f3f4f6; }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row .sr-label { font-size: 12px; color: #374151; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stat-row .sr-val   { font-size: 12px; font-weight: 700; color: #1a1a2e; }
+    .stat-row .sr-bar-wrap { flex: 1; margin: 0 10px; height: 5px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+    .stat-row .sr-bar { height: 100%; background: #f97316; border-radius: 3px; }
+
+    .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 0; }
+    .metric-pill {
+      background: #f9fafb; border-radius: 10px; padding: 14px 16px;
+      border: 1px solid #e5e7eb;
+    }
+    .metric-pill .mp-label { font-size: 11px; color: #9ca3af; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+    .metric-pill .mp-val   { font-size: 20px; font-weight: 800; color: #1a1a2e; }
+    .metric-pill .mp-sub   { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+
+    /* ── PID SECTION ── */
+    .section-divider {
+      border: none; border-top: 2px dashed #d1d5db;
+      margin: 32px 0 28px;
+    }
+    .section-banner {
+      background: #1a1a2e; color: #fff;
+      border-radius: 12px; padding: 18px 24px;
+      margin-bottom: 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .section-banner h2 { font-size: 16px; font-weight: 700; }
+    .section-banner p  { font-size: 12px; color: #9ca3af; margin-top: 3px; }
+    .section-banner .sb-badges { display: flex; gap: 8px; }
+    .sb-under { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #f87171; border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 600; }
+    .sb-over  { background: rgba(34,197,94,0.15);  border: 1px solid rgba(34,197,94,0.4);  color: #4ade80;  border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 600; }
+
+    .pid-threshold-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .pid-tc {
+      background: #fff; border-radius: 12px; padding: 18px 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .pid-tc .ptc-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+    .pid-tc.under .ptc-title { color: #dc2626; }
+    .pid-tc.over  .ptc-title { color: #16a34a; }
+    .ptc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .ptc-item label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px; }
+    .ptc-item .th-wrap { display: flex; align-items: center; }
+    .ptc-item .th-prefix { background: #f3f4f6; border: 1px solid #e5e7eb; border-right: none; border-radius: 7px 0 0 7px; padding: 7px 9px; font-size: 11px; font-weight: 700; color: #6b7280; white-space: nowrap; }
+    .ptc-item input[type="number"] { border: 1px solid #e5e7eb; border-radius: 0 7px 7px 0; padding: 7px 9px; font-size: 13px; font-weight: 700; color: #1a1a2e; width: 100%; outline: none; transition: border-color 0.2s; }
+    .ptc-item input:focus { border-color: #f97316; }
+
+    .pid-run-row { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+    .pid-run-btn { background: #1a1a2e; color: #fff; border: none; padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+    .pid-run-btn:hover:not(:disabled) { background: #2d2d50; }
+    .pid-run-btn:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+
+    .pid-loading { display: none; background: #fff; border-radius: 12px; padding: 32px; text-align: center; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+
+    .pid-results { display: none; }
+
+    /* PID KPI row */
+    .pid-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .pid-kpi { background: #fff; border-radius: 12px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+    .pid-kpi.red    { border-left: 4px solid #ef4444; }
+    .pid-kpi.green  { border-left: 4px solid #22c55e; }
+    .pid-kpi.orange { border-left: 4px solid #f97316; }
+    .pid-kpi.blue   { border-left: 4px solid #3b82f6; }
+
+    /* PID tables */
+    .pid-tables { display: grid; grid-template-columns: 1fr; gap: 24px; }
+    .pid-table-block { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); overflow: hidden; }
+    .ptb-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; }
+    .ptb-header.under { background: #fef2f2; border-bottom: 2px solid #fecaca; }
+    .ptb-header.over  { background: #f0fdf4; border-bottom: 2px solid #bbf7d0; }
+    .ptb-title { font-size: 14px; font-weight: 700; }
+    .ptb-header.under .ptb-title { color: #dc2626; }
+    .ptb-header.over  .ptb-title { color: #16a34a; }
+    .ptb-count { font-size: 12px; color: #6b7280; }
+
+    /* PID stats */
+    .pid-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+
+    /* Toast */
+    .toast {
+      display: none; position: fixed; bottom: 24px; right: 24px;
+      background: #ef4444; color: #fff; padding: 12px 20px;
+      border-radius: 10px; font-size: 13px; font-weight: 600;
+      z-index: 999; max-width: 380px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <h1>Poor Performing ASINs Dashboard</h1>
+    <p>Bewakoof · Amazon Sponsored Products · Weekly Analysis</p>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- UPLOAD -->
+  <div class="section-title">1 · Upload Source Files</div>
+  <div class="upload-grid">
+    <div class="upload-card" id="card-sp">
+      <div class="uc-icon">📊</div>
+      <div class="uc-label">SP Advertised Product Report</div>
+      <div class="uc-freq">Weekly upload</div>
+      <div class="uc-type">Excel (.xlsx)</div>
+      <div class="uc-file" id="fn-sp"></div>
+      <input type="file" accept=".xlsx,.xls" onchange="handleUpload('sp', this)">
+    </div>
+    <div class="upload-card" id="card-sales">
+      <div class="uc-icon">🛒</div>
+      <div class="uc-label">Sales Report (Vendor Central)</div>
+      <div class="uc-freq">Weekly upload</div>
+      <div class="uc-type">CSV (.csv)</div>
+      <div class="uc-file" id="fn-sales"></div>
+      <input type="file" accept=".csv" onchange="handleUpload('sales', this)">
+    </div>
+    <div class="upload-card" id="card-mapper">
+      <div class="uc-icon">🗂️</div>
+      <div class="uc-label">SKU Mapper File</div>
+      <div class="uc-freq">Monthly upload</div>
+      <div class="uc-type">Excel (.xlsx)</div>
+      <div class="uc-file" id="fn-mapper"></div>
+      <input type="file" accept=".xlsx,.xls" onchange="handleUpload('mapper', this)">
+    </div>
+  </div>
+
+  <!-- FILTER THRESHOLDS -->
+  <div class="threshold-card">
+    <div class="tc-header">
+      <div>
+        <div class="tc-title">2 · Set Filter Thresholds</div>
+        <div class="tc-note" style="margin-top:4px;">ASINs must meet ALL four conditions to be flagged as poor performing</div>
+      </div>
+      <button class="reset-thresholds" onclick="resetThresholds()">↺ Reset to Defaults</button>
+    </div>
+    <div class="threshold-grid">
+      <div class="threshold-item">
+        <label>Spend (greater than)</label>
+        <div class="th-wrap">
+          <span class="th-prefix">₹ &gt;</span>
+          <input type="number" id="th-spend" value="600" min="0" step="50">
+        </div>
+      </div>
+      <div class="threshold-item">
+        <label>Overall PID ROI (less than)</label>
+        <div class="th-wrap">
+          <span class="th-prefix">&lt;</span>
+          <input type="number" id="th-pidroi" value="6" min="0" step="0.1">
+        </div>
+      </div>
+      <div class="threshold-item">
+        <label>ROAS (less than)</label>
+        <div class="th-wrap">
+          <span class="th-prefix">&lt;</span>
+          <input type="number" id="th-roas" value="3.8" min="0" step="0.1">
+        </div>
+      </div>
+      <div class="threshold-item">
+        <label>CVR % (less than)</label>
+        <div class="th-wrap">
+          <span class="th-prefix">&lt;</span>
+          <input type="number" id="th-cvr" value="4" min="0" step="0.1">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RUN -->
+  <div class="run-row">
+    <button class="run-btn" id="run-btn" disabled onclick="runAnalysis()">▶ Run Analysis</button>
+    <span class="run-hint" id="run-hint">Upload all 3 files to enable analysis</span>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading-overlay" id="loading">
+    <div class="spinner"></div>
+    <p>Processing files…</p>
+    <small>The mapper file is large — this may take up to 30 seconds</small>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results" id="results">
+
+    <!-- KPIs -->
+    <div class="section-title">Summary</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Poor Performing ASINs</div>
+        <div class="kpi-value" id="kpi-count">—</div>
+        <div class="kpi-sub">Flagged this week</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Total Spend</div>
+        <div class="kpi-value" id="kpi-spend">—</div>
+        <div class="kpi-sub">₹ on poor performers</div>
+      </div>
+      <div class="kpi-card blue">
+        <div class="kpi-label">Avg ROAS</div>
+        <div class="kpi-value" id="kpi-roas">—</div>
+        <div class="kpi-sub">Ad Sales / Spend</div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-label">Avg CVR</div>
+        <div class="kpi-value" id="kpi-cvr">—</div>
+        <div class="kpi-sub">Orders / Clicks × 100</div>
+      </div>
+    </div>
+
+    <!-- Dimension filters -->
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label>Gender</label>
+        <select id="f-gender" onchange="applyDimFilters()"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Category</label>
+        <select id="f-category" onchange="applyDimFilters()"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Tier</label>
+        <select id="f-tier" onchange="applyDimFilters()"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Priority</label>
+        <select id="f-priority" onchange="applyDimFilters()"><option value="">All</option></select>
+      </div>
+      <button class="dim-reset" onclick="resetDimFilters()">↺ Clear</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+      <div class="table-toolbar">
+        <div class="table-count" id="table-count"></div>
+        <div class="export-btns">
+          <button class="export-btn btn-csv"  onclick="exportCSV()">⬇ Download CSV</button>
+          <button class="export-btn btn-xlsx" onclick="exportXLSX()">⬇ Download Excel</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead id="tbl-head"></thead>
+          <tbody id="tbl-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-section">
+      <div class="section-title">Statistical Breakdown</div>
+      <div class="stats-grid">
+
+        <!-- By Category -->
+        <div class="stat-card">
+          <h3>By Category</h3>
+          <div id="stat-category"></div>
+        </div>
+
+        <!-- By Gender & Tier -->
+        <div class="stat-card">
+          <h3>By Gender</h3>
+          <div id="stat-gender" style="margin-bottom:20px;"></div>
+          <h3>By Tier</h3>
+          <div id="stat-tier"></div>
+        </div>
+
+        <!-- Metric averages -->
+        <div class="stat-card">
+          <h3>Metric Averages (filtered view)</h3>
+          <div class="metrics-grid" id="stat-metrics"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /results -->
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- PID-LEVEL ANALYSIS SECTION                  -->
+  <!-- ═══════════════════════════════════════════ -->
+  <hr class="section-divider">
+
+  <div class="section-banner">
+    <div>
+      <h2>PID-Level Consistency Analysis</h2>
+      <p>Identifies PIDs that are consistently underperforming or overperforming across all 3 biweekly periods</p>
+    </div>
+    <div class="sb-badges">
+      <span class="sb-under">Underperforming: Spend &gt; ₹1200 · ROI &lt; 6 (all 3 periods)</span>
+      <span class="sb-over">Overperforming: Spend &gt; ₹1200 · ROI &gt; 8 (all 3 periods)</span>
+    </div>
+  </div>
+
+  <!-- Biweekly file upload -->
+  <div class="section-title">Upload Biweekly Tracker File</div>
+  <div class="upload-grid" style="grid-template-columns: 1fr 2fr; margin-bottom:20px;">
+    <div class="upload-card" id="card-biweekly">
+      <div class="uc-icon">📅</div>
+      <div class="uc-label">Biweekly Performance Tracker</div>
+      <div class="uc-freq">Monthly / as needed</div>
+      <div class="uc-type">Excel (.xlsx)</div>
+      <div class="uc-file" id="fn-biweekly"></div>
+      <input type="file" accept=".xlsx,.xls" onchange="handleBiweeklyUpload(this)">
+    </div>
+    <div style="background:#fff8f0;border-radius:12px;padding:18px 20px;border:1px solid #fed7aa;font-size:12px;color:#92400e;line-height:1.7;">
+      <strong>Expected format:</strong> The file should have a <em>Biweekly View</em> sheet with PID, Gender, Category, Priority in the first 4 columns, followed by 3 sets of weekly metrics (Impressions, Clicks, Spend, Orders, Ad Sales, Total Sales, CPC, CTR, CVR, ROAS, ROI) — one set per biweekly period.<br>
+      <strong>Row 1</strong> = period headers · <strong>Row 2</strong> = totals (skipped) · <strong>Row 3</strong> = column names · <strong>Row 4+</strong> = PID data
+    </div>
+  </div>
+
+  <!-- PID Thresholds -->
+  <div class="threshold-card" style="margin-bottom:20px;">
+    <div class="tc-header">
+      <div>
+        <div class="tc-title">PID Filter Thresholds</div>
+        <div class="tc-note" style="margin-top:4px;">Conditions must be met in ALL 3 biweekly periods</div>
+      </div>
+      <button class="reset-thresholds" onclick="resetPIDThresholds()">↺ Reset to Defaults</button>
+    </div>
+    <div class="pid-threshold-grid">
+      <div class="pid-tc under">
+        <div class="ptc-title">🔴 Underperforming Criteria</div>
+        <div class="ptc-row">
+          <div class="ptc-item">
+            <label>Spend (greater than)</label>
+            <div class="th-wrap">
+              <span class="th-prefix">₹ &gt;</span>
+              <input type="number" id="pid-th-under-spend" value="1200" min="0" step="100">
+            </div>
+          </div>
+          <div class="ptc-item">
+            <label>ROI (less than)</label>
+            <div class="th-wrap">
+              <span class="th-prefix">&lt;</span>
+              <input type="number" id="pid-th-under-roi" value="6" min="0" step="0.1">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pid-tc over">
+        <div class="ptc-title">🟢 Overperforming Criteria</div>
+        <div class="ptc-row">
+          <div class="ptc-item">
+            <label>Spend (greater than)</label>
+            <div class="th-wrap">
+              <span class="th-prefix">₹ &gt;</span>
+              <input type="number" id="pid-th-over-spend" value="1200" min="0" step="100">
+            </div>
+          </div>
+          <div class="ptc-item">
+            <label>ROI (greater than)</label>
+            <div class="th-wrap">
+              <span class="th-prefix">&gt;</span>
+              <input type="number" id="pid-th-over-roi" value="8" min="0" step="0.1">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pid-run-row">
+    <button class="pid-run-btn" id="pid-run-btn" disabled onclick="runPIDAnalysis()">▶ Run PID Analysis</button>
+    <span class="run-hint" id="pid-run-hint">Upload the biweekly tracker to enable PID analysis</span>
+  </div>
+
+  <div class="pid-loading" id="pid-loading">
+    <div class="spinner"></div>
+    <p style="color:#6b7280;font-size:14px;">Analysing PID performance across all periods…</p>
+  </div>
+
+  <div class="pid-results" id="pid-results">
+
+    <!-- KPIs -->
+    <div class="pid-kpi-row">
+      <div class="pid-kpi red">
+        <div class="kpi-label">Underperforming PIDs</div>
+        <div class="kpi-value" id="pid-kpi-under">—</div>
+        <div class="kpi-sub">Consistent across all 3 periods</div>
+      </div>
+      <div class="pid-kpi green">
+        <div class="kpi-label">Overperforming PIDs</div>
+        <div class="kpi-value" id="pid-kpi-over">—</div>
+        <div class="kpi-sub">Consistent across all 3 periods</div>
+      </div>
+      <div class="pid-kpi orange">
+        <div class="kpi-label">Total Spend (Under)</div>
+        <div class="kpi-value" id="pid-kpi-under-spend">—</div>
+        <div class="kpi-sub">₹ across 3 periods</div>
+      </div>
+      <div class="pid-kpi blue">
+        <div class="kpi-label">Total Spend (Over)</div>
+        <div class="kpi-value" id="pid-kpi-over-spend">—</div>
+        <div class="kpi-sub">₹ across 3 periods</div>
+      </div>
+    </div>
+
+    <!-- Two tables -->
+    <div class="pid-tables">
+
+      <!-- Underperforming -->
+      <div class="pid-table-block">
+        <div class="ptb-header under">
+          <div>
+            <div class="ptb-title">🔴 Consistently Underperforming PIDs</div>
+            <div class="ptb-count" id="under-count"></div>
+          </div>
+          <div class="export-btns">
+            <button class="export-btn btn-csv"  onclick="exportPIDCSV('under')">⬇ CSV</button>
+            <button class="export-btn btn-xlsx" onclick="exportPIDXLSX('under')">⬇ Excel</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table><thead id="under-head"></thead><tbody id="under-body"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Overperforming -->
+      <div class="pid-table-block">
+        <div class="ptb-header over">
+          <div>
+            <div class="ptb-title">🟢 Consistently Overperforming PIDs</div>
+            <div class="ptb-count" id="over-count"></div>
+          </div>
+          <div class="export-btns">
+            <button class="export-btn btn-csv"  onclick="exportPIDCSV('over')">⬇ CSV</button>
+            <button class="export-btn btn-xlsx" onclick="exportPIDXLSX('over')">⬇ Excel</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table><thead id="over-head"></thead><tbody id="over-body"></tbody></table>
+        </div>
+      </div>
+
+    </div><!-- /pid-tables -->
+
+    <!-- PID Stats -->
+    <div class="stats-section" style="margin-top:24px;">
+      <div class="section-title">PID Statistical Breakdown</div>
+      <div class="pid-stats-grid">
+        <div class="stat-card">
+          <h3>Underperforming — By Category</h3>
+          <div id="pid-stat-under-cat"></div>
+        </div>
+        <div class="stat-card">
+          <h3>Overperforming — By Category</h3>
+          <div id="pid-stat-over-cat"></div>
+        </div>
+        <div class="stat-card">
+          <h3>Metric Averages</h3>
+          <div style="margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Underperforming</div>
+            <div class="metrics-grid" id="pid-stat-under-metrics"></div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Overperforming</div>
+            <div class="metrics-grid" id="pid-stat-over-metrics"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pid-results -->
+
+</div><!-- /main -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// COLUMN DEFINITIONS
+// ─────────────────────────────────────────────
+const COLS = [
+  { key: 'asin',          label: 'ASINs',           cls: '' },
+  { key: 'pid',           label: 'PID',             cls: '' },
+  { key: 'spend',         label: 'Spend',           cls: '' },
+  { key: 'adSales',       label: 'Ad Sales',        cls: '' },
+  { key: 'totalSales',    label: 'Total Sales',     cls: '' },
+  { key: 'roi',           label: 'ROI',             cls: 'roi' },
+  { key: 'overallPidRoi', label: 'Overall PID ROI', cls: 'pidroi' },
+  { key: 'clicks',        label: 'Clicks',          cls: '' },
+  { key: 'orders',        label: 'Orders',          cls: '' },
+  { key: 'roas',          label: 'ROAS',            cls: '' },
+  { key: 'cvr',           label: 'CVR',             cls: '' },
+  { key: 'gender',        label: 'Gender',          cls: '' },
+  { key: 'category',      label: 'Category',        cls: '' },
+  { key: 'tier',          label: 'Tier',            cls: '' },
+  { key: 'sleeves',       label: 'Sleeves',         cls: '' },
+  { key: 'fit',           label: 'Fit',             cls: '' },
+  { key: 'amzLOB',        label: 'Amz LOB',         cls: '' },
+  { key: 'priority',      label: 'Priority',        cls: '' },
+];
+
+const DEFAULTS = { spend: 600, pidroi: 6, roas: 3.8, cvr: 4 };
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const uploadedFiles = { sp: null, sales: null, mapper: null };
+let allResults  = [];
+let viewResults = [];
+let sortKey = 'spend';
+let sortDir = 'desc';
+
+// ─────────────────────────────────────────────
+// UPLOADS
+// ─────────────────────────────────────────────
+function handleUpload(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+  uploadedFiles[type] = file;
+  document.getElementById(`fn-${type}`).textContent = '✓ ' + file.name;
+  document.getElementById(`card-${type}`).classList.add('uploaded');
+  const ready = uploadedFiles.sp && uploadedFiles.sales && uploadedFiles.mapper;
+  document.getElementById('run-btn').disabled = !ready;
+  document.getElementById('run-hint').textContent = ready
+    ? 'All files ready — click Run Analysis'
+    : 'Upload all 3 files to enable analysis';
+}
+
+// ─────────────────────────────────────────────
+// THRESHOLDS
+// ─────────────────────────────────────────────
+function getThresholds() {
+  return {
+    spend:  parseFloat(document.getElementById('th-spend').value)  || DEFAULTS.spend,
+    pidroi: parseFloat(document.getElementById('th-pidroi').value) || DEFAULTS.pidroi,
+    roas:   parseFloat(document.getElementById('th-roas').value)   || DEFAULTS.roas,
+    cvr:    parseFloat(document.getElementById('th-cvr').value)    || DEFAULTS.cvr,
+  };
+}
+function resetThresholds() {
+  document.getElementById('th-spend').value  = DEFAULTS.spend;
+  document.getElementById('th-pidroi').value = DEFAULTS.pidroi;
+  document.getElementById('th-roas').value   = DEFAULTS.roas;
+  document.getElementById('th-cvr').value    = DEFAULTS.cvr;
+}
+
+// ─────────────────────────────────────────────
+// FILE READERS
+// ─────────────────────────────────────────────
+function readAsBuffer(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsArrayBuffer(file); });
+}
+function readAsText(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsText(file, 'UTF-8'); });
+}
+
+// ─────────────────────────────────────────────
+// PARSERS
+// ─────────────────────────────────────────────
+function parseSPReport(wb) {
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+  const hdrs = (rows[0] || []).map(h => h ? h.toString().trim() : '');
+  const idx  = {
+    asin:   hdrs.findIndex(h => h === 'Advertised ASIN'),
+    spend:  hdrs.findIndex(h => h === 'Spend'),
+    sales:  hdrs.findIndex(h => h.includes('14 Day Total Sales')),
+    clicks: hdrs.findIndex(h => h === 'Clicks'),
+    orders: hdrs.findIndex(h => h.includes('14 Day Total Orders')),
+  };
+  const out = {};
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]; const asin = r[idx.asin]; if (!asin) continue;
+    if (!out[asin]) out[asin] = { spend: 0, adSales: 0, clicks: 0, orders: 0 };
+    out[asin].spend   += n(r[idx.spend]);
+    out[asin].adSales += n(r[idx.sales]);
+    out[asin].clicks  += n(r[idx.clicks]);
+    out[asin].orders  += n(r[idx.orders]);
+  }
+  return out;
+}
+
+function parseSalesCSV(text) {
+  const lines = text.split(/\r?\n/);
+  let hdrLine = -1;
+  for (let i = 0; i < Math.min(15, lines.length); i++) {
+    const f = csvSplit(lines[i]);
+    if (f[0] && f[0].trim().replace(/"/g,'') === 'ASIN') { hdrLine = i; break; }
+  }
+  if (hdrLine === -1) throw new Error('Could not find ASIN header row in Sales CSV.');
+  const hdrs    = csvSplit(lines[hdrLine]).map(h => h.trim().replace(/"/g,''));
+  const asinIdx = hdrs.findIndex(h => h === 'ASIN');
+  const revIdx  = hdrs.findIndex(h => h.includes('Ordered Revenue'));
+  const out = {};
+  for (let i = hdrLine + 1; i < lines.length; i++) {
+    const row  = csvSplit(lines[i]);
+    const asin = (row[asinIdx] || '').trim().replace(/"/g,'');
+    if (!asin) continue;
+    const rev = parseFloat((row[revIdx] || '0').replace(/[₹,"'\s]/g,'')) || 0;
+    out[asin] = (out[asin] || 0) + rev;
+  }
+  return out;
+}
+
+function parseMapper(wb) {
+  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+  const hdrs = (rows[0] || []).map(h => h ? h.toString().trim() : '');
+  const col  = name => hdrs.findIndex(h => h === name);
+  const idx  = { asin: col('ASIN'), pid: col('PID'), category: col('Master Category'), tier: col('Tier'), fit: col('Fit'), gender: col('Gender'), sleeves: col('Sleeves Length'), priority: col('Priority'), amzLOB: col('Amz LOB') };
+  const out  = {};
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]; const asin = r[idx.asin];
+    if (!asin || out[asin]) continue;
+    out[asin] = { pid: r[idx.pid]??'', category: r[idx.category]??'', tier: r[idx.tier]??'', fit: r[idx.fit]??'', gender: r[idx.gender]??'', sleeves: r[idx.sleeves]??'', priority: r[idx.priority]??'', amzLOB: r[idx.amzLOB]??'' };
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────
+// ANALYSIS ENGINE
+// ─────────────────────────────────────────────
+function buildResults(spData, salesData, mapData, thresholds) {
+  const rows = {};
+  for (const [asin, sp] of Object.entries(spData)) {
+    const map        = mapData[asin] || {};
+    const totalSales = salesData[asin] || 0;
+    rows[asin] = {
+      asin, pid: map.pid ?? '',
+      spend: sp.spend, adSales: sp.adSales, totalSales,
+      clicks: sp.clicks, orders: sp.orders,
+      roas:  sp.spend  > 0 ? sp.adSales  / sp.spend  : 0,
+      cvr:   sp.clicks > 0 ? (sp.orders  / sp.clicks) * 100 : 0,
+      roi:   sp.spend  > 0 ? totalSales  / sp.spend  : 0,
+      gender: map.gender??'', category: map.category??'', tier: map.tier??'',
+      sleeves: map.sleeves??'', fit: map.fit??'', amzLOB: map.amzLOB??'', priority: map.priority??'',
+    };
+  }
+  // Overall PID ROI
+  const pidAgg = {};
+  for (const item of Object.values(rows)) {
+    const pid = String(item.pid); if (!pid) continue;
+    if (!pidAgg[pid]) pidAgg[pid] = { sales: 0, spend: 0 };
+    pidAgg[pid].sales += item.totalSales;
+    pidAgg[pid].spend += item.spend;
+  }
+  for (const item of Object.values(rows)) {
+    const pid = String(item.pid);
+    const agg = pid ? pidAgg[pid] : null;
+    item.overallPidRoi = agg && agg.spend > 0 ? agg.sales / agg.spend : 0;
+  }
+  // Filter
+  const filtered = Object.values(rows).filter(r =>
+    r.spend         >  thresholds.spend  &&
+    r.overallPidRoi <  thresholds.pidroi &&
+    r.roas          <  thresholds.roas   &&
+    r.cvr           <  thresholds.cvr
+  );
+  filtered.sort((a, b) => b.spend - a.spend);
+  return filtered.map(r => ({
+    ...r,
+    spend: r2(r.spend), adSales: r2(r.adSales), totalSales: r2(r.totalSales),
+    roi: r2(r.roi), overallPidRoi: r2(r.overallPidRoi),
+    clicks: r2(r.clicks), orders: r2(r.orders), roas: r2(r.roas), cvr: r2(r.cvr),
+  }));
+}
+
+// ─────────────────────────────────────────────
+// MAIN RUN
+// ─────────────────────────────────────────────
+async function runAnalysis() {
+  showLoading(true);
+  await sleep(80);
+  try {
+    const [spBuf, salesText, mapBuf] = await Promise.all([
+      readAsBuffer(uploadedFiles.sp),
+      readAsText(uploadedFiles.sales),
+      readAsBuffer(uploadedFiles.mapper),
+    ]);
+    await sleep(30);
+    const spWB  = XLSX.read(spBuf,  { type: 'array' });
+    const mapWB = XLSX.read(mapBuf, { type: 'array' });
+    const spData    = parseSPReport(spWB);
+    const salesData = parseSalesCSV(salesText);
+    const mapData   = parseMapper(mapWB);
+    allResults  = buildResults(spData, salesData, mapData, getThresholds());
+    viewResults = [...allResults];
+    populateDropdowns();
+    renderAll();
+    document.getElementById('results').style.display = 'block';
+  } catch (err) {
+    console.error(err);
+    showToast('Error: ' + err.message);
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ─────────────────────────────────────────────
+// DIMENSION FILTERS
+// ─────────────────────────────────────────────
+function populateDropdowns() {
+  const fill = (id, key) => {
+    const sel  = document.getElementById(id);
+    const vals = [...new Set(allResults.map(r => r[key]).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">All</option>' + vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  };
+  fill('f-gender', 'gender'); fill('f-category', 'category');
+  fill('f-tier',   'tier');   fill('f-priority', 'priority');
+}
+
+function applyDimFilters() {
+  const g = document.getElementById('f-gender').value;
+  const c = document.getElementById('f-category').value;
+  const t = document.getElementById('f-tier').value;
+  const p = document.getElementById('f-priority').value;
+  viewResults = allResults.filter(r =>
+    (!g || r.gender   === g) && (!c || r.category === c) &&
+    (!t || r.tier     === t) && (!p || r.priority === p)
+  );
+  renderAll();
+}
+
+function resetDimFilters() {
+  ['f-gender','f-category','f-tier','f-priority'].forEach(id => document.getElementById(id).value = '');
+  viewResults = [...allResults];
+  renderAll();
+}
+
+// ─────────────────────────────────────────────
+// RENDER ALL
+// ─────────────────────────────────────────────
+function renderAll() {
+  renderKPIs();
+  renderTable();
+  renderStats();
+}
+
+function renderKPIs() {
+  const d = viewResults;
+  const ts = d.reduce((s, r) => s + r.spend, 0);
+  const ar = d.length ? d.reduce((s, r) => s + r.roas, 0) / d.length : 0;
+  const ac = d.length ? d.reduce((s, r) => s + r.cvr,  0) / d.length : 0;
+  document.getElementById('kpi-count').textContent = allResults.length;
+  document.getElementById('kpi-spend').textContent = '₹' + Math.round(ts).toLocaleString('en-IN');
+  document.getElementById('kpi-roas').textContent  = r2(ar).toFixed(2);
+  document.getElementById('kpi-cvr').textContent   = r2(ac).toFixed(2) + '%';
+}
+
+function renderTable() {
+  // Header
+  document.getElementById('tbl-head').innerHTML = '<tr>' + COLS.map(col => {
+    const thCls  = col.cls ? `th-${col.cls}` : '';
+    const active = col.key === sortKey ? 'sort-active' : '';
+    const arrow  = col.key === sortKey ? (sortDir === 'asc' ? '▲' : '▼') : '⇅';
+    return `<th class="${thCls} ${active}" onclick="sortBy('${col.key}')">${esc(col.label)}<span class="sort-icon">${arrow}</span></th>`;
+  }).join('') + '</tr>';
+
+  // Body
+  const tbody = document.getElementById('tbl-body');
+  if (!viewResults.length) {
+    tbody.innerHTML = `<tr><td colspan="${COLS.length}" class="no-data">No ASINs match the current filters.</td></tr>`;
+  } else {
+    tbody.innerHTML = viewResults.map(row =>
+      '<tr>' + COLS.map(col => {
+        const tdCls = col.cls ? `td-${col.cls}` : '';
+        const val   = row[col.key] !== null && row[col.key] !== undefined ? row[col.key] : '';
+        return `<td class="${tdCls}">${esc(String(val))}</td>`;
+      }).join('') + '</tr>'
+    ).join('');
+  }
+  document.getElementById('table-count').innerHTML =
+    `Showing <strong>${viewResults.length}</strong> of <strong>${allResults.length}</strong> poor performing ASINs`;
+}
+
+function sortBy(key) {
+  sortDir = sortKey === key ? (sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
+  sortKey = key;
+  const numeric = ['spend','adSales','totalSales','roi','overallPidRoi','clicks','orders','roas','cvr'].includes(key);
+  viewResults.sort((a, b) => {
+    const va = a[key], vb = b[key];
+    if (numeric) return sortDir === 'asc' ? va - vb : vb - va;
+    return sortDir === 'asc' ? String(va||'').localeCompare(String(vb||'')) : String(vb||'').localeCompare(String(va||''));
+  });
+  renderTable();
+}
+
+// ─────────────────────────────────────────────
+// STATS
+// ─────────────────────────────────────────────
+function renderStats() {
+  const d = viewResults;
+  if (!d.length) return;
+
+  // Helper: group by key, count + sum spend
+  function groupBy(key) {
+    const map = {};
+    d.forEach(r => {
+      const v = r[key] || 'Unknown';
+      if (!map[v]) map[v] = { count: 0, spend: 0 };
+      map[v].count++;
+      map[v].spend += r.spend;
+    });
+    return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+  }
+
+  const maxCount = d.length;
+
+  function barRows(entries, maxCount) {
+    return entries.slice(0, 8).map(([label, data]) => {
+      const pct = Math.round(data.count / maxCount * 100);
+      return `<div class="stat-row">
+        <span class="sr-label" title="${esc(label)}">${esc(label)}</span>
+        <div class="sr-bar-wrap"><div class="sr-bar" style="width:${pct}%"></div></div>
+        <span class="sr-val">${data.count} <span style="color:#9ca3af;font-weight:400;font-size:10px;">(${pct}%)</span></span>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('stat-category').innerHTML = barRows(groupBy('category'), maxCount);
+  document.getElementById('stat-gender').innerHTML   = barRows(groupBy('gender'),   maxCount);
+  document.getElementById('stat-tier').innerHTML     = barRows(groupBy('tier'),     maxCount);
+
+  // Metric averages
+  const avg = key => d.length ? r2(d.reduce((s, r) => s + r[key], 0) / d.length) : 0;
+  const sum = key => r2(d.reduce((s, r) => s + r[key], 0));
+  const metrics = [
+    { label: 'Avg ROI',           val: avg('roi').toFixed(2),          sub: 'Total Sales / Spend' },
+    { label: 'Avg Overall PID ROI', val: avg('overallPidRoi').toFixed(2), sub: 'PID-level metric' },
+    { label: 'Avg ROAS',          val: avg('roas').toFixed(2),         sub: 'Ad Sales / Spend' },
+    { label: 'Avg CVR %',         val: avg('cvr').toFixed(2) + '%',    sub: 'Orders / Clicks × 100' },
+    { label: 'Total Ad Sales',    val: '₹' + Math.round(sum('adSales')).toLocaleString('en-IN'), sub: 'Across filtered ASINs' },
+    { label: 'Total Orders',      val: Math.round(sum('orders')).toLocaleString('en-IN'),         sub: 'Attributed orders' },
+  ];
+  document.getElementById('stat-metrics').innerHTML = metrics.map(m =>
+    `<div class="metric-pill">
+      <div class="mp-label">${esc(m.label)}</div>
+      <div class="mp-val">${esc(m.val)}</div>
+      <div class="mp-sub">${esc(m.sub)}</div>
+    </div>`
+  ).join('');
+}
+
+// ─────────────────────────────────────────────
+// EXPORT
+// ─────────────────────────────────────────────
+function exportCSV() {
+  if (!viewResults.length) return;
+  const hdr  = COLS.map(c => c.label).join(',');
+  const body = viewResults.map(r =>
+    COLS.map(c => { const v = r[c.key] !== undefined && r[c.key] !== null ? r[c.key] : ''; return String(v).includes(',') ? `"${v}"` : v; }).join(',')
+  ).join('\n');
+  download('Poor_Performing_ASINs.csv', 'text/csv', '﻿' + hdr + '\n' + body);
+}
+
+function exportXLSX() {
+  if (!viewResults.length) return;
+  const data = [COLS.map(c => c.label), ...viewResults.map(r => COLS.map(c => r[c.key] !== undefined ? r[c.key] : ''))];
+  const ws   = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = COLS.map(c => ({ wch: Math.max(c.label.length + 2, 14) }));
+  const roiIdx    = COLS.findIndex(c => c.key === 'roi');
+  const pidRoiIdx = COLS.findIndex(c => c.key === 'overallPidRoi');
+  for (let r = 0; r < data.length; r++) {
+    const fRoi    = r === 0 ? { patternType:'solid', fgColor:{rgb:'F9A825'} } : { patternType:'solid', fgColor:{rgb:'FFFDE7'} };
+    const fPidRoi = r === 0 ? { patternType:'solid', fgColor:{rgb:'558B2F'} } : { patternType:'solid', fgColor:{rgb:'F1F8E9'} };
+    const cRoi    = XLSX.utils.encode_cell({ r, c: roiIdx });
+    const cPid    = XLSX.utils.encode_cell({ r, c: pidRoiIdx });
+    if (ws[cRoi]) ws[cRoi].s = { fill: fRoi,    font: { bold: r===0 } };
+    if (ws[cPid]) ws[cPid].s = { fill: fPidRoi, font: { bold: r===0, color: r===0?{rgb:'FFFFFF'}:undefined } };
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Poor Performing ASINs');
+  XLSX.writeFile(wb, 'Poor_Performing_ASINs.xlsx');
+}
+
+// ─────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────
+function n(v)  { return parseFloat(v) || 0; }
+function r2(v) { return Math.round(v * 100) / 100; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function download(filename, mime, content) {
+  const blob = new Blob([content], { type: mime + ';charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+  a.click(); URL.revokeObjectURL(url);
+}
+function showLoading(on) { document.getElementById('loading').style.display = on ? 'block' : 'none'; }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 6000);
+}
+function csvSplit(line) {
+  const out = []; let cur = ''; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { q = !q; } else if (c === ',' && !q) { out.push(cur); cur = ''; } else { cur += c; }
+  }
+  out.push(cur); return out;
+}
+
+// ═══════════════════════════════════════════════
+// PID-LEVEL ANALYSIS
+// ═══════════════════════════════════════════════
+
+const PID_DEFAULTS = { underSpend: 1200, underROI: 6, overSpend: 1200, overROI: 8 };
+let biweeklyFile   = null;
+let underResults   = [];
+let overResults    = [];
+
+// PID table columns
+const PID_COLS = [
+  { key: 'pid',       label: 'PID' },
+  { key: 'gender',    label: 'Gender' },
+  { key: 'category',  label: 'Category' },
+  { key: 'priority',  label: 'Priority' },
+  { key: 'amzTag',    label: 'Amz Tag' },
+  { key: 'w1Spend',   label: 'W1 Spend' },
+  { key: 'w1ROI',     label: 'W1 ROI' },
+  { key: 'w2Spend',   label: 'W2 Spend' },
+  { key: 'w2ROI',     label: 'W2 ROI' },
+  { key: 'w3Spend',   label: 'W3 Spend' },
+  { key: 'w3ROI',     label: 'W3 ROI' },
+  { key: 'avgROI',    label: 'Avg ROI' },
+  { key: 'totalSpend',label: 'Total Spend' },
+];
+
+function handleBiweeklyUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  biweeklyFile = file;
+  document.getElementById('fn-biweekly').textContent = '✓ ' + file.name;
+  document.getElementById('card-biweekly').classList.add('uploaded');
+  document.getElementById('pid-run-btn').disabled = false;
+  document.getElementById('pid-run-hint').textContent = 'File ready — click Run PID Analysis';
+}
+
+function resetPIDThresholds() {
+  document.getElementById('pid-th-under-spend').value = PID_DEFAULTS.underSpend;
+  document.getElementById('pid-th-under-roi').value   = PID_DEFAULTS.underROI;
+  document.getElementById('pid-th-over-spend').value  = PID_DEFAULTS.overSpend;
+  document.getElementById('pid-th-over-roi').value    = PID_DEFAULTS.overROI;
+}
+
+function getPIDThresholds() {
+  return {
+    underSpend: parseFloat(document.getElementById('pid-th-under-spend').value) || PID_DEFAULTS.underSpend,
+    underROI:   parseFloat(document.getElementById('pid-th-under-roi').value)   || PID_DEFAULTS.underROI,
+    overSpend:  parseFloat(document.getElementById('pid-th-over-spend').value)  || PID_DEFAULTS.overSpend,
+    overROI:    parseFloat(document.getElementById('pid-th-over-roi').value)    || PID_DEFAULTS.overROI,
+  };
+}
+
+async function runPIDAnalysis() {
+  document.getElementById('pid-loading').style.display = 'block';
+  document.getElementById('pid-results').style.display = 'none';
+  document.getElementById('pid-run-btn').disabled = true;
+  await sleep(80);
+
+  try {
+    const buf = await readAsBuffer(biweeklyFile);
+    const wb  = XLSX.read(buf, { type: 'array' });
+
+    // Find the Biweekly View sheet
+    const sheetName = wb.SheetNames.find(s => s.toLowerCase().includes('biweekly')) || wb.SheetNames[0];
+    const ws   = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+
+    // Row 0 = period headers, Row 1 = totals (skip), Row 2 = column headers, Row 3+ = data
+    const hdrs = (rows[2] || []).map(h => h ? h.toString().trim() : '');
+
+    // Find all Spend and ROI column indices (there will be 3 of each)
+    const spendIdxs = [], roiIdxs = [], raosIdxs = [], cvrIdxs = [];
+    const amzTagIdx = hdrs.findIndex(h => h.toLowerCase().includes('amz tag') || h.toLowerCase() === 'amz tag');
+
+    hdrs.forEach((h, i) => {
+      if (h === 'Spend')  spendIdxs.push(i);
+      if (h === 'ROI')    roiIdxs.push(i);
+      if (h === 'ROAS')   raosIdxs.push(i);
+      if (h === 'CVR')    cvrIdxs.push(i);
+    });
+
+    if (spendIdxs.length < 3 || roiIdxs.length < 3) {
+      throw new Error('Could not find 3 Spend and 3 ROI columns. Check the Biweekly View sheet structure.');
+    }
+
+    const th = getPIDThresholds();
+    const under = [], over = [];
+
+    for (let i = 3; i < rows.length; i++) {
+      const row = rows[i];
+      const pid = row[0];
+      if (!pid || pid === 'PID') continue;
+
+      const w1Spend = n(row[spendIdxs[0]]);
+      const w2Spend = n(row[spendIdxs[1]]);
+      const w3Spend = n(row[spendIdxs[2]]);
+      const w1ROI   = n(row[roiIdxs[0]]);
+      const w2ROI   = n(row[roiIdxs[1]]);
+      const w3ROI   = n(row[roiIdxs[2]]);
+
+      const item = {
+        pid:        pid,
+        gender:     row[1]  ?? '',
+        category:   row[2]  ?? '',
+        priority:   row[3]  ?? '',
+        amzTag:     amzTagIdx >= 0 ? (row[amzTagIdx] ?? '') : '',
+        w1Spend:    r2(w1Spend),
+        w1ROI:      r2(w1ROI),
+        w2Spend:    r2(w2Spend),
+        w2ROI:      r2(w2ROI),
+        w3Spend:    r2(w3Spend),
+        w3ROI:      r2(w3ROI),
+        avgROI:     r2((w1ROI + w2ROI + w3ROI) / 3),
+        totalSpend: r2(w1Spend + w2Spend + w3Spend),
+      };
+
+      // Underperforming: ALL 3 periods have Spend > threshold AND ROI < threshold
+      const isUnder =
+        (w1Spend > th.underSpend && w1ROI < th.underROI) &&
+        (w2Spend > th.underSpend && w2ROI < th.underROI) &&
+        (w3Spend > th.underSpend && w3ROI < th.underROI);
+
+      // Overperforming: ALL 3 periods have Spend > threshold AND ROI > threshold
+      const isOver =
+        (w1Spend > th.overSpend && w1ROI > th.overROI) &&
+        (w2Spend > th.overSpend && w2ROI > th.overROI) &&
+        (w3Spend > th.overSpend && w3ROI > th.overROI);
+
+      if (isUnder) under.push(item);
+      if (isOver)  over.push(item);
+    }
+
+    under.sort((a, b) => b.totalSpend - a.totalSpend);
+    over.sort((a, b)  => b.avgROI     - a.avgROI);
+
+    underResults = under;
+    overResults  = over;
+
+    renderPIDKPIs();
+    renderPIDTable('under', underResults, 'under-head', 'under-body', 'under-count');
+    renderPIDTable('over',  overResults,  'over-head',  'over-body',  'over-count');
+    renderPIDStats();
+
+    document.getElementById('pid-results').style.display = 'block';
+    document.getElementById('pid-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch (err) {
+    console.error(err);
+    showToast('PID Error: ' + err.message);
+  } finally {
+    document.getElementById('pid-loading').style.display = 'none';
+    document.getElementById('pid-run-btn').disabled = false;
+  }
+}
+
+function renderPIDKPIs() {
+  const uSpend = underResults.reduce((s, r) => s + r.totalSpend, 0);
+  const oSpend = overResults.reduce((s, r)  => s + r.totalSpend, 0);
+  document.getElementById('pid-kpi-under').textContent       = underResults.length;
+  document.getElementById('pid-kpi-over').textContent        = overResults.length;
+  document.getElementById('pid-kpi-under-spend').textContent = '₹' + Math.round(uSpend).toLocaleString('en-IN');
+  document.getElementById('pid-kpi-over-spend').textContent  = '₹' + Math.round(oSpend).toLocaleString('en-IN');
+}
+
+let pidSortKey  = { under: 'totalSpend', over: 'avgROI' };
+let pidSortDir  = { under: 'desc',       over: 'desc'   };
+
+function renderPIDTable(type, data, headId, bodyId, countId) {
+  const sk = pidSortKey[type];
+  const sd = pidSortDir[type];
+
+  // Header
+  document.getElementById(headId).innerHTML = '<tr>' + PID_COLS.map(col => {
+    const active = col.key === sk ? 'sort-active' : '';
+    const arrow  = col.key === sk ? (sd === 'asc' ? '▲' : '▼') : '⇅';
+    return `<th class="${active}" onclick="pidSortBy('${type}','${col.key}')">${esc(col.label)}<span class="sort-icon">${arrow}</span></th>`;
+  }).join('') + '</tr>';
+
+  // Body
+  const tbody = document.getElementById(bodyId);
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="${PID_COLS.length}" class="no-data">No PIDs match this criteria across all 3 periods.</td></tr>`;
+  } else {
+    tbody.innerHTML = data.map(row =>
+      '<tr>' + PID_COLS.map(col => {
+        const val = row[col.key] !== null && row[col.key] !== undefined ? row[col.key] : '';
+        // Colour ROI cells
+        let style = '';
+        if (col.key === 'w1ROI' || col.key === 'w2ROI' || col.key === 'w3ROI' || col.key === 'avgROI') {
+          style = type === 'under'
+            ? 'style="background:#fef2f2;color:#dc2626;font-weight:600;"'
+            : 'style="background:#f0fdf4;color:#16a34a;font-weight:600;"';
+        }
+        return `<td ${style}>${esc(String(val))}</td>`;
+      }).join('') + '</tr>'
+    ).join('');
+  }
+  document.getElementById(countId).textContent = `${data.length} PID${data.length !== 1 ? 's' : ''}`;
+}
+
+function pidSortBy(type, key) {
+  if (pidSortKey[type] === key) {
+    pidSortDir[type] = pidSortDir[type] === 'asc' ? 'desc' : 'asc';
+  } else {
+    pidSortKey[type] = key;
+    pidSortDir[type] = 'desc';
+  }
+  const numeric = ['w1Spend','w1ROI','w2Spend','w2ROI','w3Spend','w3ROI','avgROI','totalSpend'].includes(key);
+  const data = type === 'under' ? underResults : overResults;
+  data.sort((a, b) => {
+    const va = a[key], vb = b[key];
+    if (numeric) return pidSortDir[type] === 'asc' ? va - vb : vb - va;
+    return pidSortDir[type] === 'asc' ? String(va||'').localeCompare(String(vb||'')) : String(vb||'').localeCompare(String(va||''));
+  });
+  renderPIDTable(type, data,
+    type === 'under' ? 'under-head' : 'over-head',
+    type === 'under' ? 'under-body' : 'over-body',
+    type === 'under' ? 'under-count': 'over-count'
+  );
+}
+
+function renderPIDStats() {
+  function groupBar(data, key) {
+    const map = {};
+    data.forEach(r => { const v = r[key] || 'Unknown'; if (!map[v]) map[v] = 0; map[v]++; });
+    const entries = Object.entries(map).sort((a,b) => b[1]-a[1]);
+    const max = data.length || 1;
+    return entries.slice(0,8).map(([label, count]) => {
+      const pct = Math.round(count/max*100);
+      return `<div class="stat-row"><span class="sr-label" title="${esc(label)}">${esc(label)}</span><div class="sr-bar-wrap"><div class="sr-bar" style="width:${pct}%"></div></div><span class="sr-val">${count} <span style="color:#9ca3af;font-size:10px;">(${pct}%)</span></span></div>`;
+    }).join('');
+  }
+
+  function metricPills(data, color) {
+    if (!data.length) return '<div style="color:#9ca3af;font-size:12px;padding:8px;">No data</div>';
+    const avg = key => data.length ? r2(data.reduce((s,r) => s+r[key],0)/data.length) : 0;
+    const sum = key => r2(data.reduce((s,r) => s+r[key],0));
+    const items = [
+      { label:'Avg W1 ROI', val: avg('w1ROI').toFixed(2) },
+      { label:'Avg W2 ROI', val: avg('w2ROI').toFixed(2) },
+      { label:'Avg W3 ROI', val: avg('w3ROI').toFixed(2) },
+      { label:'Avg ROI',    val: avg('avgROI').toFixed(2) },
+      { label:'Total Spend',val: '₹'+Math.round(sum('totalSpend')).toLocaleString('en-IN') },
+      { label:'PID Count',  val: data.length },
+    ];
+    return items.map(m => `<div class="metric-pill"><div class="mp-label">${esc(m.label)}</div><div class="mp-val" style="font-size:16px;color:${color};">${esc(String(m.val))}</div></div>`).join('');
+  }
+
+  document.getElementById('pid-stat-under-cat').innerHTML     = groupBar(underResults, 'category');
+  document.getElementById('pid-stat-over-cat').innerHTML      = groupBar(overResults,  'category');
+  document.getElementById('pid-stat-under-metrics').innerHTML = metricPills(underResults, '#dc2626');
+  document.getElementById('pid-stat-over-metrics').innerHTML  = metricPills(overResults,  '#16a34a');
+}
+
+function exportPIDCSV(type) {
+  const data = type === 'under' ? underResults : overResults;
+  if (!data.length) return;
+  const hdr  = PID_COLS.map(c => c.label).join(',');
+  const body = data.map(r => PID_COLS.map(c => { const v = r[c.key]??''; return String(v).includes(',') ? `"${v}"` : v; }).join(',')).join('\n');
+  const name = type === 'under' ? 'Underperforming_PIDs.csv' : 'Overperforming_PIDs.csv';
+  download(name, 'text/csv', '﻿' + hdr + '\n' + body);
+}
+
+function exportPIDXLSX(type) {
+  const data = type === 'under' ? underResults : overResults;
+  if (!data.length) return;
+  const wsData = [PID_COLS.map(c => c.label), ...data.map(r => PID_COLS.map(c => r[c.key]??''))];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = PID_COLS.map(c => ({ wch: Math.max(c.label.length+2, 12) }));
+  const wb = XLSX.utils.book_new();
+  const sheetLabel = type === 'under' ? 'Underperforming PIDs' : 'Overperforming PIDs';
+  XLSX.utils.book_append_sheet(wb, ws, sheetLabel);
+  const fname = type === 'under' ? 'Underperforming_PIDs.xlsx' : 'Overperforming_PIDs.xlsx';
+  XLSX.writeFile(wb, fname);
+}
+</script>
+</body>
+</html>
